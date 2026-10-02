@@ -1,5 +1,7 @@
 # kalshi-trading-infra
 
+[![tests](https://github.com/charlesfales/kalshi-trading-infra/actions/workflows/ci.yml/badge.svg)](https://github.com/charlesfales/kalshi-trading-infra/actions/workflows/ci.yml)
+
 The execution, risk, and research infrastructure behind the automated strategies I've run
 with real money on [Kalshi](https://kalshi.com) since May 2026.
 
@@ -21,6 +23,17 @@ trade, and live results stay private. I'm happy to walk through them in an inter
 | `stats.py` | Day-block bootstrap CIs, a market-implied null (Poisson-binomial over entry prices), and Kelly sizing evaluated at the CI **lower bound**. |
 | `prereg.py` | Pre-registered candidates (hypothesis, mechanism, falsifier, sample target) scored PASS / FAIL / UNDECIDED from forward data only. |
 | `ledger.py` | Aggregates partial fills per order and reconciles the ledger to the account balance in exact `Decimal`. |
+| `book.py` | Order books rebuilt from the `orderbook_delta` channel. Handles bids-not-asks (`yes_ask = 1 - best_no_bid`), invalidates every book on a subscription after a sequence gap, treats unseeded sides as unknown rather than empty, uses exact integer price ticks, and checks itself against REST ground truth. |
+| `ws_feed.py` | Authenticated WebSocket feed: reconnects with backoff and resubscribes any invalidated market for a fresh snapshot. A broken book answers `None`, so you can't trade on one. |
+| `replay.py` | Event replay that runs the **same** `Strategy.decide` the live loop runs. Events are ordered by receive time, series are readable only as-of now, and fills happen against the book *after* latency, IOC to the limit. `estimate_lead_lag` checks recordings for clock offsets before a backtest joins them. |
+
+## Research and docs
+
+- **[Sizing study](docs/SIZING_STUDY.md).** A Monte Carlo of four sizing policies in a world with a real edge and a world with none. Lower-bound Kelly almost never draws down in either, and the study shows what that insurance costs in growth.
+- **[Pre-registration template](docs/PREREGISTRATION_TEMPLATE.md).** The form every candidate rule fills in before forward data is scored.
+- **[`examples/example_bot.py`](examples/example_bot.py).** A placeholder strategy replayed end to end on synthetic markets: book, replay, latency, settlement, fees, then a mechanical verdict. The placeholder is handed the true fair value while the book is quoted with noise, so it has a known edge by construction, and the harness finds it: `PASS`, +3.0¢ a contract, 90% CI [+1.0, +5.1].
+
+[![Balance paths under three sizing policies](docs/img/sizing_paths.png)](docs/SIZING_STUDY.md)
 
 ## How I work
 
@@ -48,6 +61,11 @@ trade, and live results stay private. I'm happy to walk through them in an inter
 - **A row is evidence only if someone was charged for it.** Cancelled and resting orders
   once leaked into a record priced at their aim. The record is now built from fills and
   reconciled to the cent.
+- **Check the book against ground truth.** A book rebuilt from deltas can drift quietly
+  if one assumption about the feed is wrong. `OrderBook.verify` compares it with an
+  independent REST read and invalidates it on drift.
+- **Recorder clocks lie.** A feed recorded a fraction of a second late makes a backtest
+  read the future without any bug in the strategy. `estimate_lead_lag` finds the offset.
 - **Money arithmetic happens in cents.** `25.0 * 1.10` is `27.500000000000004`, and
   `10 // 0.40` is `24`.
 
@@ -55,7 +73,9 @@ trade, and live results stay private. I'm happy to walk through them in an inter
 
 ```bash
 pip install -e ".[dev]"
-pytest
+pytest                                  # 52 tests
+python examples/example_bot.py          # end-to-end replay on synthetic markets
+pip install -e ".[research]" && python research/sizing_study.py
 ```
 
 ## Contact

@@ -256,8 +256,10 @@ def test_pass_and_fail():
 # ---------------------------------------------------------------- ledger
 def test_partial_fills_aggregate():
     fills = [
-        {"order_id": "o1", "count": 3, "side": "yes", "yes_price_dollars": "0.40", "fee_cost": "0.02"},
-        {"order_id": "o1", "count": 1, "side": "yes", "yes_price_dollars": "0.44", "fee_cost": "0.01"},
+        {"order_id": "o1", "count": 3, "side": "yes", "yes_price_dollars": "0.40",
+         "fee_cost": "0.02"},
+        {"order_id": "o1", "count": 1, "side": "yes", "yes_price_dollars": "0.44",
+         "fee_cost": "0.01"},
         {"order_id": "o2", "count": 0, "side": "no", "no_price_dollars": "0.60"},
     ]
     out = fills_by_order(fills)
